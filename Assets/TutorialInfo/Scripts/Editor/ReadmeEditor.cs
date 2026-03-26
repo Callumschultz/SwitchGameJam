@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -11,6 +11,7 @@ using System.Reflection;
 public class ReadmeEditor : Editor
 {
     static string s_ShowedReadmeSessionStateName = "ReadmeEditor.showedReadme";
+    static string s_LayoutLoadFailedSessionStateName = "ReadmeEditor.layoutLoadFailed";
     
     static string s_ReadmeSourceDirectory = "Assets/TutorialInfo";
 
@@ -60,8 +61,25 @@ public class ReadmeEditor : Editor
 
             if (readme && !readme.loadedLayout)
             {
-                LoadLayout();
+                // Layout files are version-sensitive; if this Unity editor version can't
+                // apply the layout, it can throw inspector exceptions. Fail "closed":
+                // try once, and if it fails, disable further attempts.
+                if (!SessionState.GetBool(s_LayoutLoadFailedSessionStateName, false))
+                {
+                    try
+                    {
+                        LoadLayout();
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"ReadmeEditor: failed to load tutorial layout. Disabling auto-layout. Error: {e.Message}");
+                        SessionState.SetBool(s_LayoutLoadFailedSessionStateName, true);
+                    }
+                }
+
+                // Mark as loaded so we don't keep trying every domain reload.
                 readme.loadedLayout = true;
+                EditorUtility.SetDirty(readme);
             }
         }
     }

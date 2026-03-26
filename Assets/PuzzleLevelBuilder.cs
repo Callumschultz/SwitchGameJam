@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.AI;
+using Unity.AI.Navigation;
 
 public class PuzzleLevelBuilder : MonoBehaviour
 {
@@ -250,7 +251,10 @@ public class PuzzleLevelBuilder : MonoBehaviour
 
             Vector3 pos = new Vector3(x, floorTopY + yOffset, z);
 
-            GameObject enemy = new GameObject($"Enemy_{i + 1}");
+            // Use a built-in capsule primitive so the enemy has a visible MeshRenderer.
+            // (Previously we only added a CapsuleCollider, which results in an invisible enemy.)
+            GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            enemy.name = $"Enemy_{i + 1}";
             enemy.transform.position = pos;
             enemy.transform.SetParent(parent, true);
 
@@ -259,13 +263,28 @@ public class PuzzleLevelBuilder : MonoBehaviour
                 enemy.layer = enemyLayerIndex;
             }
 
-            CapsuleCollider capsule = enemy.AddComponent<CapsuleCollider>();
+            CapsuleCollider capsule = enemy.GetComponent<CapsuleCollider>();
+            if (capsule == null)
+            {
+                capsule = enemy.AddComponent<CapsuleCollider>();
+            }
             capsule.radius = 0.3f;
             capsule.height = 1.8f;
             capsule.center = Vector3.up * (capsule.height * 0.5f);
 
+            // Make it a small grey capsule (visible in both Game view and builds).
+            Renderer renderer = enemy.GetComponentInChildren<Renderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial.color = Color.gray;
+            }
+
             // Keep the enemy stable with rigidbody but prevent rotation flicker.
-            Rigidbody rb = enemy.AddComponent<Rigidbody>();
+            Rigidbody rb = enemy.GetComponent<Rigidbody>();
+            if (rb == null)
+            {
+                rb = enemy.AddComponent<Rigidbody>();
+            }
             rb.useGravity = false;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
