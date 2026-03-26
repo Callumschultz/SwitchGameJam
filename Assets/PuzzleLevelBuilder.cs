@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 public class PuzzleLevelBuilder : MonoBehaviour
 {
@@ -12,6 +13,13 @@ public class PuzzleLevelBuilder : MonoBehaviour
 
     [Header("Build Settings")]
     [SerializeField] private bool rebuildOnPlay = true;
+
+    [Header("Enemies (runtime spawn)")]
+    [SerializeField] private bool spawnEnemies = true;
+    [SerializeField] private int enemyCount = 3;
+    [SerializeField] private float enemySpawnYOffset = 1f;
+    [SerializeField] private float enemyPatrolRadius = 5f;
+    [SerializeField] private float enemyDetectionRange = 8f;
 
     private const string RootName = "PuzzleRuntimeLayout";
 
@@ -84,6 +92,12 @@ public class PuzzleLevelBuilder : MonoBehaviour
 
         float floorTopY = GetTopY(floor);
 
+        // Ensure the player has the attack component so clicking immediately works.
+        if (player.GetComponentInChildren<PlayerAttack>() == null)
+        {
+            player.gameObject.AddComponent<PlayerAttack>();
+        }
+
         // Door 1 blocks forward X path. Button is offset on Z to force 3D movement.
         DoorController door1 = CreateDoor(new Vector3(startX + 8f, y + 1f, baseZ), root.transform, "Door_Puzzle1", doorZScale, floorTopY);
         SetLayerRecursively(door1.gameObject, groundLayerIndex);
@@ -110,6 +124,13 @@ public class PuzzleLevelBuilder : MonoBehaviour
         endZone.name = "EndZone";
         endZone.transform.localScale = new Vector3(2f, 0.05f, 2f);
         SetLayerRecursively(endZone, groundLayerIndex);
+
+        BuildNavMesh(root);
+
+        if (spawnEnemies)
+        {
+            SpawnEnemies(enemyCount, startX, baseZ, corridorWidthZ, floorTopY, enemySpawnYOffset, root.transform);
+        }
     }
 
     private int ResolvePlayerGroundLayerIndex()
@@ -195,6 +216,82 @@ public class PuzzleLevelBuilder : MonoBehaviour
         float delta = desiredMinY - currentMinY;
 
         obj.transform.position += Vector3.up * delta;
+    }
+
+    private void BuildNavMesh(GameObject rootRoot)
+    {
+        if (rootRoot == null) return;
+
+        // Runtime navmesh build so enemies can work immediately without manual editor baking.
+        // (In the editor you can still bake NavMeshSurface normally.)
+        NavMeshSurface surface = rootRoot.GetComponent<NavMeshSurface>();
+        if (surface == null)
+        {
+            surface = rootRoot.AddComponent<NavMeshSurface>();
+        }
+
+        surface.BuildNavMesh();
+    }
+
+    private void SpawnEnemies(int count, float startX, float baseZ, float corridorWidthZ, float floorTopY, float yOffset, Transform parent)
+    {
+        if (count <= 0) return;
+
+        int enemyLayerIndex = LayerMask.NameToLayer("Enemy");
+
+        // A simple set of spawn points that keeps them on the main floor region.
+        float[] xOffsets = new float[] { 2f, 8f, 14f };
+        float[] zOffsets = new float[] { 2.5f, -2.5f, 1.2f };
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = startX + xOffsets[Mathf.Min(i, xOffsets.Length - 1)];
+            float z = baseZ + zOffsets[Mathf.Min(i, zOffsets.Length - 1)];
+
+            Vector3 pos = new Vector3(x, floorTopY + yOffset, z);
+
+            GameObject enemy = new GameObject($"Enemy_{i + 1}");
+            enemy.transform.position = pos;
+            enemy.transform.SetParent(parent, true);
+
+            if (enemyLayerIndex >= 0)
+            {
+                enemy.layer = enemyLayerIndex;
+            }
+
+            CapsuleCollider capsule = enemy.AddComponent<CapsuleCollider>();
+            capsule.radius = 0.3f;
+            capsule.height = 1.8f;
+            capsule.center = Vector3.up * (capsule.height * 0.5f);
+
+            // Keep the enemy stable with rigidbody but prevent rotation flicker.
+            Rigidbody rb = enemy.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
+            NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
+            agent.speed = 3.2f;
+
+            EnemyAI ai = enemy.AddComponent<EnemyAI>();
+
+            // Configure AI values from the builder so you can tweak them in the inspector.
+            ai.patrolRadius = enemyPatrolRadius;
+            ai.detectionRange = enemyDetectionRange;
+
+            // Ensure the collider sits on the floor (avoids tiny penetrations that can mess up patrol grounding).
+            AlignColliderBottomToY(enemy, floorTopY, epsilon: 0.005f);
+
+            // Face the player initially to make detection easier.
+            if (player != null)
+            {
+                Vector3 toPlayer = player.position - enemy.transform.position;
+                toPlayer.y = 0f;
+                if (toPlayer.sqrMagnitude > 0.0001f)
+                {
+                    enemy.transform.forward = toPlayer.normalized;
+                }
+            }
+        }
     }
 
     private DoorController CreateDoor(Vector3 position, Transform parent, string name, float doorZScale, float floorTopY)
