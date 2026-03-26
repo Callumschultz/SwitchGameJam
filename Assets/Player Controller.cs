@@ -20,6 +20,7 @@ public class PlayerController : MonoBehaviour
     private bool isRunning;
 
     private bool is2DMode = false;
+    public bool Is2DMode => is2DMode;
 
     void Start()
     {
@@ -76,9 +77,10 @@ public class PlayerController : MonoBehaviour
 
     void HandleJump()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        // Prevent "jump stacking" when the player is still considered grounded
+        // due to door/floor contact or minor collider penetration.
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && rb.linearVelocity.y <= 0.1f)
         {
-            rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z); // reset Y before jump
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             anim.SetBool("isJumping", true);
         }
