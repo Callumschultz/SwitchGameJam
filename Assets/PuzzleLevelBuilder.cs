@@ -15,13 +15,6 @@ public class PuzzleLevelBuilder : MonoBehaviour
     [Header("Build Settings")]
     [SerializeField] private bool rebuildOnPlay = true;
 
-    [Header("Enemies (runtime spawn)")]
-    [SerializeField] private bool spawnEnemies = true;
-    [SerializeField] private int enemyCount = 3;
-    [SerializeField] private float enemySpawnYOffset = 1f;
-    [SerializeField] private float enemyPatrolRadius = 5f;
-    [SerializeField] private float enemyDetectionRange = 8f;
-
     private const string RootName = "PuzzleRuntimeLayout";
 
     private void Start()
@@ -72,26 +65,61 @@ public class PuzzleLevelBuilder : MonoBehaviour
 
         // Layout is built relative to the player so the puzzles are always near where you start.
         float startX = baseX - 2f;
-        float mainFloorLengthX = 40f;
-        float corridorWidthZ = 8f;
-        float mainFloorCenterX = startX + mainFloorLengthX * 0.5f;
+        float mainFloorLengthX = 74f;
+        float corridorWidthZ = 24f;
+
+        // Puzzle 3 (Invisible Bridge) uses a full-width floor gap over which a narrow bridge floats.
+        float invisibleGapStartX = startX + 34f;
+        float invisibleGapEndX = startX + 44f;
+        float invisibleBridgeLengthX = invisibleGapEndX - invisibleGapStartX;
+        float invisibleBridgeWidthZ = 1.2f;
+        float invisibleBridgeZCenter = baseZ + (corridorWidthZ * 0.5f) - (invisibleBridgeWidthZ * 0.5f) - 0.6f;
+
+        float floor1LengthX = invisibleGapStartX - startX;
+        float floor2StartX = invisibleGapEndX;
+        float floor2LengthX = mainFloorLengthX - (floor2StartX - startX);
+
         // Slightly wider than the floor so the player can't "sneak around" the wall in Z.
         float doorZScale = corridorWidthZ + 0.25f;
 
-        // Main floor strip.
-        GameObject floor = Instantiate(floorPrefab, new Vector3(mainFloorCenterX, y, baseZ), Quaternion.identity, root.transform);
-        floor.name = "PuzzleFloor";
-        floor.transform.localScale = new Vector3(mainFloorLengthX, 0.1f, corridorWidthZ);
-        SetLayerRecursively(floor, groundLayerIndex);
+        // Floor 1 (covers everything up to the invisible bridge gap).
+        GameObject floor1 = Instantiate(
+            floorPrefab,
+            new Vector3(startX + floor1LengthX * 0.5f, y, baseZ),
+            Quaternion.identity,
+            root.transform);
+        floor1.name = "PuzzleFloor";
+        floor1.transform.localScale = new Vector3(floor1LengthX, 0.1f, corridorWidthZ);
+        SetLayerRecursively(floor1, groundLayerIndex);
 
 #if UNITY_EDITOR
-        Debug.Log($"PuzzleLevelBuilder: resolved ground layer index = {groundLayerIndex}. Spawned PuzzleFloor layer = {floor.layer}.", this);
+        Debug.Log($"PuzzleLevelBuilder: resolved ground layer index = {groundLayerIndex}. Spawned PuzzleFloor layer = {floor1.layer}.", this);
 #endif
 
         // Snap the player onto the generated floor so enabling gravity doesn't make them fall through.
-        SnapPlayerOntoFloor(floor, player);
+        SnapPlayerOntoFloor(floor1, player);
 
-        float floorTopY = GetTopY(floor);
+        float floorTopY = GetTopY(floor1);
+
+        // Floating narrow bridge (only exists inside the invisible bridge gap).
+        GameObject invisibleBridgeFloor = Instantiate(
+            floorPrefab,
+            new Vector3(invisibleGapStartX + invisibleBridgeLengthX * 0.5f, y, invisibleBridgeZCenter),
+            Quaternion.identity,
+            root.transform);
+        invisibleBridgeFloor.name = "InvisibleBridgeFloor";
+        invisibleBridgeFloor.transform.localScale = new Vector3(invisibleBridgeLengthX, 0.1f, invisibleBridgeWidthZ);
+        SetLayerRecursively(invisibleBridgeFloor, groundLayerIndex);
+
+        // Floor 2 (covers everything after the invisible bridge gap).
+        GameObject floor2 = Instantiate(
+            floorPrefab,
+            new Vector3(floor2StartX + floor2LengthX * 0.5f, y, baseZ),
+            Quaternion.identity,
+            root.transform);
+        floor2.name = "PuzzleFloor_Continue";
+        floor2.transform.localScale = new Vector3(floor2LengthX, 0.1f, corridorWidthZ);
+        SetLayerRecursively(floor2, groundLayerIndex);
 
         // Ensure the player has the attack component so clicking immediately works.
         if (player.GetComponentInChildren<PlayerAttack>() == null)
@@ -120,18 +148,72 @@ public class PuzzleLevelBuilder : MonoBehaviour
             floorTopY);
         button3.require2DMode = true;
 
+        // Puzzle 3 (Invisible Bridge): door opens via a button on the floating narrow bridge.
+        float invisibleDoorX = invisibleGapEndX + 3f;
+        DoorController invisibleDoor = CreateDoor(
+            new Vector3(invisibleDoorX, y + 1f, baseZ),
+            root.transform,
+            "Door_PuzzleInvisibleBridge",
+            doorZScale,
+            floorTopY);
+        SetLayerRecursively(invisibleDoor.gameObject, groundLayerIndex);
+
+        CreateButton(
+            new Vector3(invisibleGapEndX - 2.2f, y + 0.15f, invisibleBridgeZCenter),
+            root.transform,
+            "Button_PuzzleInvisibleBridge",
+            invisibleDoor,
+            floorTopY);
+
+        // Puzzle 4 (Two Switches): timed two-button sequence opens the exit door.
+        float twoSwitchDoorX = invisibleDoorX + 12f;
+        DoorController twoSwitchDoor = CreateDoor(
+            new Vector3(twoSwitchDoorX, y + 1f, baseZ),
+            root.transform,
+            "Door_PuzzleTwoSwitches",
+            doorZScale,
+            floorTopY);
+        twoSwitchDoor.SetMode(DoorController.DoorMode.TimedTwoSwitches);
+        // Give 2D a fair window; 3D will be blocked by require2DMode on the buttons.
+        twoSwitchDoor.ConfigureTimedTwoSwitches(windowSeconds: 1.4f, requiredButtons: 2);
+        SetLayerRecursively(twoSwitchDoor.gameObject, groundLayerIndex);
+
+        float buttonAX = twoSwitchDoorX - 8f;
+        float buttonBX = twoSwitchDoorX - 5f;
+        // In 3D mode these buttons sit far apart on Z.
+        // In 2D mode `ButtonTrigger.collapseToPlayerZIn2D` snaps them close together.
+        float buttonA_Z = baseZ - (corridorWidthZ * 0.5f) + 0.8f;
+        float buttonB_Z = baseZ + (corridorWidthZ * 0.5f) - 0.8f;
+
+        ButtonTrigger buttonA = CreateButtonWithTrigger(
+            new Vector3(buttonAX, y + 0.15f, buttonA_Z),
+            root.transform,
+            "Button_PuzzleTwoSwitches_A",
+            twoSwitchDoor,
+            floorTopY);
+        buttonA.require2DMode = true;
+        buttonA.collapseToPlayerZIn2D = true;
+
+        ButtonTrigger buttonB = CreateButtonWithTrigger(
+            new Vector3(buttonBX, y + 0.15f, buttonB_Z),
+            root.transform,
+            "Button_PuzzleTwoSwitches_B",
+            twoSwitchDoor,
+            floorTopY);
+        buttonB.require2DMode = true;
+        buttonB.collapseToPlayerZIn2D = true;
+
         // End zone marker near level end.
-        GameObject endZone = Instantiate(floorPrefab, new Vector3(startX + 37f, y + 0.03f, baseZ), Quaternion.identity, root.transform);
+        GameObject endZone = Instantiate(
+            floorPrefab,
+            new Vector3(twoSwitchDoorX + 7f, y + 0.03f, baseZ),
+            Quaternion.identity,
+            root.transform);
         endZone.name = "EndZone";
         endZone.transform.localScale = new Vector3(2f, 0.05f, 2f);
         SetLayerRecursively(endZone, groundLayerIndex);
 
         BuildNavMesh(root);
-
-        if (spawnEnemies)
-        {
-            SpawnEnemies(enemyCount, startX, baseZ, corridorWidthZ, floorTopY, enemySpawnYOffset, root.transform);
-        }
     }
 
     private int ResolvePlayerGroundLayerIndex()
@@ -232,85 +314,6 @@ public class PuzzleLevelBuilder : MonoBehaviour
         }
 
         surface.BuildNavMesh();
-    }
-
-    private void SpawnEnemies(int count, float startX, float baseZ, float corridorWidthZ, float floorTopY, float yOffset, Transform parent)
-    {
-        if (count <= 0) return;
-
-        int enemyLayerIndex = LayerMask.NameToLayer("Enemy");
-
-        // A simple set of spawn points that keeps them on the main floor region.
-        float[] xOffsets = new float[] { 2f, 8f, 14f };
-        float[] zOffsets = new float[] { 2.5f, -2.5f, 1.2f };
-
-        for (int i = 0; i < count; i++)
-        {
-            float x = startX + xOffsets[Mathf.Min(i, xOffsets.Length - 1)];
-            float z = baseZ + zOffsets[Mathf.Min(i, zOffsets.Length - 1)];
-
-            Vector3 pos = new Vector3(x, floorTopY + yOffset, z);
-
-            // Use a built-in capsule primitive so the enemy has a visible MeshRenderer.
-            // (Previously we only added a CapsuleCollider, which results in an invisible enemy.)
-            GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            enemy.name = $"Enemy_{i + 1}";
-            enemy.transform.position = pos;
-            enemy.transform.SetParent(parent, true);
-
-            if (enemyLayerIndex >= 0)
-            {
-                enemy.layer = enemyLayerIndex;
-            }
-
-            CapsuleCollider capsule = enemy.GetComponent<CapsuleCollider>();
-            if (capsule == null)
-            {
-                capsule = enemy.AddComponent<CapsuleCollider>();
-            }
-            capsule.radius = 0.3f;
-            capsule.height = 1.8f;
-            capsule.center = Vector3.up * (capsule.height * 0.5f);
-
-            // Make it a small grey capsule (visible in both Game view and builds).
-            Renderer renderer = enemy.GetComponentInChildren<Renderer>();
-            if (renderer != null)
-            {
-                renderer.sharedMaterial.color = Color.gray;
-            }
-
-            // Keep the enemy stable with rigidbody but prevent rotation flicker.
-            Rigidbody rb = enemy.GetComponent<Rigidbody>();
-            if (rb == null)
-            {
-                rb = enemy.AddComponent<Rigidbody>();
-            }
-            rb.useGravity = false;
-            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-
-            NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
-            agent.speed = 3.2f;
-
-            EnemyAI ai = enemy.AddComponent<EnemyAI>();
-
-            // Configure AI values from the builder so you can tweak them in the inspector.
-            ai.patrolRadius = enemyPatrolRadius;
-            ai.detectionRange = enemyDetectionRange;
-
-            // Ensure the collider sits on the floor (avoids tiny penetrations that can mess up patrol grounding).
-            AlignColliderBottomToY(enemy, floorTopY, epsilon: 0.005f);
-
-            // Face the player initially to make detection easier.
-            if (player != null)
-            {
-                Vector3 toPlayer = player.position - enemy.transform.position;
-                toPlayer.y = 0f;
-                if (toPlayer.sqrMagnitude > 0.0001f)
-                {
-                    enemy.transform.forward = toPlayer.normalized;
-                }
-            }
-        }
     }
 
     private DoorController CreateDoor(Vector3 position, Transform parent, string name, float doorZScale, float floorTopY)

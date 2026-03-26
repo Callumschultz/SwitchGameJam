@@ -4,6 +4,11 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class ButtonTrigger : MonoBehaviour
 {
+    [Header("2D Z Collapse (optional)")]
+    // For puzzles where "Z collapses" in 2D mode visually AND physically.
+    // When enabled, the button snaps its Z position to the player's Z whenever the player is in 2D mode.
+    [SerializeField] public bool collapseToPlayerZIn2D = false;
+
     [Header("Linked Door")]
     public DoorController controlledDoor;
 
@@ -16,12 +21,38 @@ public class ButtonTrigger : MonoBehaviour
 
     private Vector3 initialLocalPosition;
     private bool triggered;
+    private Coroutine pressRoutine;
+
+    private Transform playerTransform;
+    private PlayerController playerController;
+    private float originalWorldZ;
 
     private void Awake()
     {
         Collider col = GetComponent<Collider>();
         col.isTrigger = true;
         initialLocalPosition = transform.localPosition;
+        originalWorldZ = transform.position.z;
+    }
+
+    private void Start()
+    {
+        playerTransform = GameObject.FindGameObjectWithTag("Player")?.transform;
+        playerController = playerTransform != null ? playerTransform.GetComponentInParent<PlayerController>() : null;
+    }
+
+    private void Update()
+    {
+        if (!collapseToPlayerZIn2D) return;
+        if (playerTransform == null || playerController == null) return;
+
+        float desiredZ = playerController.Is2DMode ? playerTransform.position.z : originalWorldZ;
+        Vector3 pos = transform.position;
+        if (!Mathf.Approximately(pos.z, desiredZ))
+        {
+            pos.z = desiredZ;
+            transform.position = pos;
+        }
     }
 
     private void OnTriggerEnter(Collider other)
@@ -48,14 +79,14 @@ public class ButtonTrigger : MonoBehaviour
 
         if (controlledDoor != null)
         {
-            controlledDoor.Open();
+            controlledDoor.OnButtonPressed(this);
         }
         else
         {
             Debug.LogWarning($"{name} has no linked door assigned.", this);
         }
 
-        StartCoroutine(PressAnimationRoutine());
+        pressRoutine = StartCoroutine(PressAnimationRoutine());
     }
 
     private IEnumerator PressAnimationRoutine()
@@ -72,5 +103,18 @@ public class ButtonTrigger : MonoBehaviour
         }
 
         transform.localPosition = pressedPosition;
+    }
+
+    public void ResetTrigger()
+    {
+        triggered = false;
+
+        if (pressRoutine != null)
+        {
+            StopCoroutine(pressRoutine);
+            pressRoutine = null;
+        }
+
+        transform.localPosition = initialLocalPosition;
     }
 }
