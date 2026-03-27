@@ -64,3 +64,6 @@ A pre-built version can be found in the `/Build` folder (if included). Run `SWIT
 ## Notes on AI Tool Usage
 
 This project was built as part of a game jam with the goal of using as many AI tools as possible throughout the development pipeline. AI was used at every stage — from generating the player character mesh and all other assets (Tripo3D), to rigging and animating it (Mixamo), to writing all game scripts (Claude + Cursor), to generating all audio assets (Adobe Firefly + Suno). Human input was focused on design decisions, integration, and playtesting.
+
+## LINK TO GIT 
+https://github.com/Callumschultz/SwitchGameJam.git
