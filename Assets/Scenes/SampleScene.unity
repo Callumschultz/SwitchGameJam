@@ -838,6 +838,7 @@ MonoBehaviour:
   floorPrefab: {fileID: 8387174320314410938, guid: 8dac470d1df27bb499b50aabc9cf66e8, type: 3}
   doorPrefab: {fileID: 1049170643321716317, guid: 9e656716c0919f148a22dee7657027fa, type: 3}
   buttonPrefab: {fileID: 596320175974174902, guid: fe974dada3376de43b066eca01e2df85, type: 3}
+  endZonePrefab: {fileID: 7955217480276216792, guid: a67049972372f134b8497759aec6dc7f, type: 3}
   player: {fileID: -8679921383154817045, guid: 4c4c9fef601b596489a1a61a6f12b9f6, type: 3}
   rebuildOnPlay: 1
 --- !u!4 &682911562

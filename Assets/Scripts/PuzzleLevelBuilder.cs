@@ -172,6 +172,8 @@ public class PuzzleLevelBuilder : MonoBehaviour
     [Tooltip("Legacy default button prefab used by the built-in preset layout and as fallback.")]
     [SerializeField] private GameObject buttonPrefab;
 
+    [SerializeField] private GameObject endZonePrefab; 
+
     [Header("References")]
     [SerializeField] private Transform player;
 
@@ -375,13 +377,13 @@ public class PuzzleLevelBuilder : MonoBehaviour
         buttonB.collapseToPlayerZIn2D = true;
 
         // End zone marker near level end.
-        GameObject endZone = Instantiate(
-            floorPrefab,
-            new Vector3(twoSwitchDoorX + 7f, y + 0.03f, baseZ),
+       GameObject endZone = Instantiate(
+            endZonePrefab != null ? endZonePrefab : floorPrefab,
+            new Vector3(twoSwitchDoorX + 7f, y + 1.25f, baseZ),
             Quaternion.identity,
             root.transform);
         endZone.name = "EndZone";
-        endZone.transform.localScale = new Vector3(2f, 0.05f, 2f);
+        endZone.transform.localScale = new Vector3(1f, 1f, 1f);
         SetLayerRecursively(endZone, groundLayerIndex);
 
         BuildNavMesh(root);
