@@ -841,6 +841,7 @@ MonoBehaviour:
   endZonePrefab: {fileID: 7955217480276216792, guid: a67049972372f134b8497759aec6dc7f, type: 3}
   player: {fileID: -8679921383154817045, guid: 4c4c9fef601b596489a1a61a6f12b9f6, type: 3}
   rebuildOnPlay: 1
+  levelIndex: 0
 --- !u!4 &682911562
 Transform:
   m_ObjectHideFlags: 0
@@ -1188,6 +1189,53 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1472653840
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1472653842}
+  - component: {fileID: 1472653841}
+  m_Layer: 0
+  m_Name: LevelManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1472653841
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1472653840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1bc4822a3d9c2f49a57be3607f621c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelManager
+  levelSpacingX: 250
+  gameOverScreen: {fileID: 0}
+  levelCompleteScreen: {fileID: 0}
+--- !u!4 &1472653842
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1472653840}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 57.68839, y: -0.56011, z: -3.50892}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1683015126
 GameObject:
   m_ObjectHideFlags: 0
@@ -1985,3 +2033,4 @@ SceneRoots:
   - {fileID: 38300755}
   - {fileID: 1683015128}
   - {fileID: 1263318120}
+  - {fileID: 1472653842}

@@ -180,6 +180,8 @@ public class PuzzleLevelBuilder : MonoBehaviour
     [Header("Build Settings")]
     [SerializeField] private bool rebuildOnPlay = true;
 
+    [Header("Level Settings")]
+    [SerializeField] private int levelIndex = 0;
     private const string RootName = "PuzzleRuntimeLayout";
 
     private void Start()
@@ -192,202 +194,214 @@ public class PuzzleLevelBuilder : MonoBehaviour
         BuildLevel();
     }
 
-    private void BuildLevel()
+        public void SetLevelIndex(int index)
     {
-        // Always use the tagged Player at runtime.
-        // (This prevents issues if the inspector reference is accidentally wrong.)
-        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
-        if (playerObject != null)
-        {
-            player = playerObject.transform;
-        }
-        if (player == null)
-        {
-            Debug.LogError("PuzzleLevelBuilder could not find a Player transform (tagged 'Player').", this);
-            return;
-        }
-
-        // Ensure spawned surfaces are on the same layer the player uses for ground checks.
-        int groundLayerIndex = ResolvePlayerGroundLayerIndex();
-
-        GameObject oldRoot = GameObject.Find(RootName);
-        if (oldRoot != null)
-        {
-            Destroy(oldRoot);
-        }
-
-        GameObject root = new GameObject(RootName);
-
-        if (useInspectorLayout)
-        {
-            BuildInspectorLayout(root, player.position, groundLayerIndex);
-            BuildNavMesh(root);
-            return;
-        }
-
-        if (floorPrefab == null || doorPrefab == null || buttonPrefab == null)
-        {
-            Debug.LogError("PuzzleLevelBuilder is missing one or more legacy prefab references.", this);
-            Destroy(root);
-            return;
-        }
-
-        float y = player.position.y - 0.5f;
-        float baseX = player.position.x;
-        float baseZ = player.position.z;
-
-        // Layout is built relative to the player so the puzzles are always near where you start.
-        float startX = baseX - 2f;
-        float mainFloorLengthX = 74f;
-        float corridorWidthZ = 24f;
-
-        // Puzzle 3 (Invisible Bridge) uses a full-width floor gap over which a narrow bridge floats.
-        float invisibleGapStartX = startX + 34f;
-        float invisibleGapEndX = startX + 44f;
-        float invisibleBridgeLengthX = invisibleGapEndX - invisibleGapStartX;
-        float invisibleBridgeWidthZ = 1.2f;
-        float invisibleBridgeZCenter = baseZ + (corridorWidthZ * 0.5f) - (invisibleBridgeWidthZ * 0.5f) - 0.6f;
-
-        float floor1LengthX = invisibleGapStartX - startX;
-        float floor2StartX = invisibleGapEndX;
-        float floor2LengthX = mainFloorLengthX - (floor2StartX - startX);
-
-        // Slightly wider than the floor so the player can't "sneak around" the wall in Z.
-        float doorZScale = corridorWidthZ + 0.25f;
-
-        // Floor 1 (covers everything up to the invisible bridge gap).
-        GameObject floor1 = Instantiate(
-            floorPrefab,
-            new Vector3(startX + floor1LengthX * 0.5f, y, baseZ),
-            Quaternion.identity,
-            root.transform);
-        floor1.name = "PuzzleFloor";
-        floor1.transform.localScale = new Vector3(floor1LengthX, 0.1f, corridorWidthZ);
-        SetLayerRecursively(floor1, groundLayerIndex);
-
-#if UNITY_EDITOR
-        Debug.Log($"PuzzleLevelBuilder: resolved ground layer index = {groundLayerIndex}. Spawned PuzzleFloor layer = {floor1.layer}.", this);
-#endif
-
-        // Snap the player onto the generated floor so enabling gravity doesn't make them fall through.
-        SnapPlayerOntoFloor(floor1, player);
-
-        float floorTopY = GetTopY(floor1);
-
-        // Floating narrow bridge (only exists inside the invisible bridge gap).
-        GameObject invisibleBridgeFloor = Instantiate(
-            floorPrefab,
-            new Vector3(invisibleGapStartX + invisibleBridgeLengthX * 0.5f, y, invisibleBridgeZCenter),
-            Quaternion.identity,
-            root.transform);
-        invisibleBridgeFloor.name = "InvisibleBridgeFloor";
-        invisibleBridgeFloor.transform.localScale = new Vector3(invisibleBridgeLengthX, 0.1f, invisibleBridgeWidthZ);
-        SetLayerRecursively(invisibleBridgeFloor, groundLayerIndex);
-
-        // Floor 2 (covers everything after the invisible bridge gap).
-        GameObject floor2 = Instantiate(
-            floorPrefab,
-            new Vector3(floor2StartX + floor2LengthX * 0.5f, y, baseZ),
-            Quaternion.identity,
-            root.transform);
-        floor2.name = "PuzzleFloor_Continue";
-        floor2.transform.localScale = new Vector3(floor2LengthX, 0.1f, corridorWidthZ);
-        SetLayerRecursively(floor2, groundLayerIndex);
-
-        // Ensure the player has the attack component so clicking immediately works.
-        if (player.GetComponentInChildren<PlayerAttack>() == null)
-        {
-            player.gameObject.AddComponent<PlayerAttack>();
-        }
-
-        // Door 1 blocks forward X path. Button is offset on Z to force 3D movement.
-        DoorController door1 = CreateDoor(new Vector3(startX + 8f, y + 1f, baseZ), root.transform, "Door_Puzzle1", doorZScale, floorTopY);
-        SetLayerRecursively(door1.gameObject, groundLayerIndex);
-        CreateButton(new Vector3(startX + 4f, y + 0.15f, baseZ + 3f), root.transform, "Button_Puzzle1", door1, floorTopY);
-
-        // Door 2 blocks later path. Button stays on same Z to reward 2D lock movement.
-        DoorController door2 = CreateDoor(new Vector3(startX + 20f, y + 1f, baseZ), root.transform, "Door_Puzzle2", doorZScale, floorTopY);
-        SetLayerRecursively(door2.gameObject, groundLayerIndex);
-        CreateButton(new Vector3(startX + 16f, y + 0.15f, baseZ), root.transform, "Button_Puzzle2", door2, floorTopY);
-
-        // Puzzle 3: Door can only be opened in 2D mode.
-        DoorController door3 = CreateDoor(new Vector3(startX + 30f, y + 1f, baseZ), root.transform, "Door_Puzzle3", doorZScale, floorTopY);
-        SetLayerRecursively(door3.gameObject, groundLayerIndex);
-        ButtonTrigger button3 = CreateButtonWithTrigger(
-            new Vector3(startX + 26f, y + 0.15f, baseZ),
-            root.transform,
-            "Button_Puzzle3",
-            door3,
-            floorTopY);
-        button3.require2DMode = true;
-
-        // Puzzle 3 (Invisible Bridge): door opens via a button on the floating narrow bridge.
-        float invisibleDoorX = invisibleGapEndX + 3f;
-        DoorController invisibleDoor = CreateDoor(
-            new Vector3(invisibleDoorX, y + 1f, baseZ),
-            root.transform,
-            "Door_PuzzleInvisibleBridge",
-            doorZScale,
-            floorTopY);
-        SetLayerRecursively(invisibleDoor.gameObject, groundLayerIndex);
-
-        CreateButton(
-            new Vector3(invisibleGapEndX - 2.2f, y + 0.15f, invisibleBridgeZCenter),
-            root.transform,
-            "Button_PuzzleInvisibleBridge",
-            invisibleDoor,
-            floorTopY);
-
-        // Puzzle 4 (Two Switches): timed two-button sequence opens the exit door.
-        float twoSwitchDoorX = invisibleDoorX + 12f;
-        DoorController twoSwitchDoor = CreateDoor(
-            new Vector3(twoSwitchDoorX, y + 1f, baseZ),
-            root.transform,
-            "Door_PuzzleTwoSwitches",
-            doorZScale,
-            floorTopY);
-        twoSwitchDoor.SetMode(DoorController.DoorMode.TimedTwoSwitches);
-        // Give 2D a fair window; 3D will be blocked by require2DMode on the buttons.
-        twoSwitchDoor.ConfigureTimedTwoSwitches(windowSeconds: 1.4f, requiredButtons: 2);
-        SetLayerRecursively(twoSwitchDoor.gameObject, groundLayerIndex);
-
-        float buttonAX = twoSwitchDoorX - 8f;
-        float buttonBX = twoSwitchDoorX - 5f;
-        // In 3D mode these buttons sit far apart on Z.
-        // In 2D mode `ButtonTrigger.collapseToPlayerZIn2D` snaps them close together.
-        float buttonA_Z = baseZ - (corridorWidthZ * 0.5f) + 0.8f;
-        float buttonB_Z = baseZ + (corridorWidthZ * 0.5f) - 0.8f;
-
-        ButtonTrigger buttonA = CreateButtonWithTrigger(
-            new Vector3(buttonAX, y + 0.15f, buttonA_Z),
-            root.transform,
-            "Button_PuzzleTwoSwitches_A",
-            twoSwitchDoor,
-            floorTopY);
-        buttonA.require2DMode = true;
-        buttonA.collapseToPlayerZIn2D = true;
-
-        ButtonTrigger buttonB = CreateButtonWithTrigger(
-            new Vector3(buttonBX, y + 0.15f, buttonB_Z),
-            root.transform,
-            "Button_PuzzleTwoSwitches_B",
-            twoSwitchDoor,
-            floorTopY);
-        buttonB.require2DMode = true;
-        buttonB.collapseToPlayerZIn2D = true;
-
-        // End zone marker near level end.
-       GameObject endZone = Instantiate(
-            endZonePrefab != null ? endZonePrefab : floorPrefab,
-            new Vector3(twoSwitchDoorX + 7f, y + 1.25f, baseZ),
-            Quaternion.identity,
-            root.transform);
-        endZone.name = "EndZone";
-        endZone.transform.localScale = new Vector3(1f, 1f, 1f);
-        SetLayerRecursively(endZone, groundLayerIndex);
-
-        BuildNavMesh(root);
+    levelIndex = index;
     }
+
+    public void RebuildLevel()
+    {
+    BuildLevel();
+    }
+private void BuildLevel()
+{
+    GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
+    if (playerObject != null)
+    {
+        player = playerObject.transform;
+    }
+    if (player == null)
+    {
+        Debug.LogError("PuzzleLevelBuilder could not find a Player transform (tagged 'Player').", this);
+        return;
+    }
+
+    int groundLayerIndex = ResolvePlayerGroundLayerIndex();
+
+    GameObject oldRoot = GameObject.Find(RootName);
+    if (oldRoot != null)
+    {
+        Destroy(oldRoot);
+    }
+
+    GameObject root = new GameObject(RootName);
+
+    if (useInspectorLayout)
+    {
+        BuildInspectorLayout(root, player.position, groundLayerIndex);
+        BuildNavMesh(root);
+        return;
+    }
+
+    if (floorPrefab == null || doorPrefab == null || buttonPrefab == null)
+    {
+        Debug.LogError("PuzzleLevelBuilder is missing one or more legacy prefab references.", this);
+        Destroy(root);
+        return;
+    }
+
+    float y = player.position.y - 0.5f;
+    float baseX = player.position.x;
+    float baseZ = player.position.z;
+
+    float startX = baseX - 2f;
+    float mainFloorLengthX = 74f;
+    float corridorWidthZ = 24f;
+    float doorZScale = corridorWidthZ + 0.25f;
+
+    // Slot positions along X for each puzzle slot
+    float[] wallPositions = new float[]
+    {
+        startX + 8f,
+        startX + 20f,
+        startX + 34f,
+        startX + 52f,
+    };
+
+    float sectionPadding = 1.5f;
+    float floorTopY = y;
+
+    // Spawn floor sections between each door slot
+    for (int i = 0; i <= wallPositions.Length; i++)
+    {
+        float sectionStartX;
+        float sectionEndX;
+
+        if (i == 0)
+        {
+            sectionStartX = startX;
+            sectionEndX = wallPositions[0] - sectionPadding;
+        }
+        else if (i == wallPositions.Length)
+        {
+            sectionStartX = wallPositions[i - 1] + sectionPadding;
+            sectionEndX = startX + mainFloorLengthX;
+        }
+        else
+        {
+            sectionStartX = wallPositions[i - 1] + sectionPadding;
+            sectionEndX = wallPositions[i] - sectionPadding;
+        }
+
+        float sectionLength = sectionEndX - sectionStartX;
+        if (sectionLength <= 0f) continue;
+
+        GameObject floorSection = Instantiate(
+            floorPrefab,
+            new Vector3(sectionStartX + sectionLength * 0.5f, y, baseZ),
+            Quaternion.identity,
+            root.transform);
+        floorSection.name = $"FloorSection_{i}";
+        floorSection.transform.localScale = new Vector3(sectionLength, 0.1f, corridorWidthZ);
+        SetLayerRecursively(floorSection, groundLayerIndex);
+
+        // Snap player onto the first floor section only
+        if (i == 0)
+        {
+            SnapPlayerOntoFloor(floorSection, player);
+            floorTopY = GetTopY(floorSection);
+        }
+    }
+
+    // Ensure the attack component exists on the player
+    if (player.GetComponentInChildren<PlayerAttack>() == null)
+    {
+        player.gameObject.AddComponent<PlayerAttack>();
+    }
+
+    // Define puzzle order per level
+    int[][] puzzleOrders = new int[][]
+    {
+        new int[] { 1, 2, 3, 4 }, // Level 1 — original order
+        new int[] { 2, 4, 1, 3 }, // Level 2
+        new int[] { 3, 1, 4, 2 }, // Level 3
+        new int[] { 4, 3, 2, 1 }, // Level 4 — reversed
+    };
+
+    int[] order = puzzleOrders[Mathf.Clamp(levelIndex, 0, puzzleOrders.Length - 1)];
+
+    for (int i = 0; i < 4; i++)
+    {
+        int puzzleId = order[i];
+        float slotBaseX = wallPositions[i];
+
+        switch (puzzleId)
+        {
+            case 1: // Z Offset button — must use 3D
+                DoorController door1 = CreateDoor(new Vector3(slotBaseX, y + 1f, baseZ), root.transform, $"Door_P1_Slot{i}", doorZScale, floorTopY);
+                SetLayerRecursively(door1.gameObject, groundLayerIndex);
+                CreateButton(new Vector3(slotBaseX - 4f, y + 0.15f, baseZ + 3f), root.transform, $"Button_P1_Slot{i}", door1, floorTopY);
+                break;
+
+            case 2: // Same Z button — rewards 2D
+                DoorController door2 = CreateDoor(new Vector3(slotBaseX, y + 1f, baseZ), root.transform, $"Door_P2_Slot{i}", doorZScale, floorTopY);
+                SetLayerRecursively(door2.gameObject, groundLayerIndex);
+                CreateButton(new Vector3(slotBaseX - 4f, y + 0.15f, baseZ), root.transform, $"Button_P2_Slot{i}", door2, floorTopY);
+                break;
+
+            case 3: // Invisible bridge
+                float gapStartX = slotBaseX - 2f;
+                float gapEndX = slotBaseX + 8f;
+                float bridgeLengthX = gapEndX - gapStartX;
+                float bridgeWidthZ = 1.2f;
+                float bridgeZCenter = baseZ + (corridorWidthZ * 0.5f) - (bridgeWidthZ * 0.5f) - 0.6f;
+
+                GameObject bridgeFloor = Instantiate(
+                    floorPrefab,
+                    new Vector3(gapStartX + bridgeLengthX * 0.5f, y, bridgeZCenter),
+                    Quaternion.identity,
+                    root.transform);
+                bridgeFloor.name = $"InvisibleBridge_Slot{i}";
+                bridgeFloor.transform.localScale = new Vector3(bridgeLengthX, 0.1f, bridgeWidthZ);
+                SetLayerRecursively(bridgeFloor, groundLayerIndex);
+
+                DoorController door3 = CreateDoor(new Vector3(gapEndX + 1f, y + 1f, baseZ), root.transform, $"Door_P3_Slot{i}", doorZScale, floorTopY);
+                SetLayerRecursively(door3.gameObject, groundLayerIndex);
+                CreateButton(new Vector3(gapEndX - 2f, y + 0.15f, bridgeZCenter), root.transform, $"Button_P3_Slot{i}", door3, floorTopY);
+                break;
+
+            case 4: // Timed two switches
+                DoorController door4 = CreateDoor(new Vector3(slotBaseX, y + 1f, baseZ), root.transform, $"Door_P4_Slot{i}", doorZScale, floorTopY);
+                door4.SetMode(DoorController.DoorMode.TimedTwoSwitches);
+                door4.ConfigureTimedTwoSwitches(windowSeconds: 1.4f, requiredButtons: 2);
+                SetLayerRecursively(door4.gameObject, groundLayerIndex);
+
+                float btnAX = slotBaseX - 7f;
+                float btnBX = slotBaseX - 4f;
+                float btnAZ = baseZ - (corridorWidthZ * 0.25f) + 0.8f;
+                float btnBZ = baseZ + (corridorWidthZ * 0.25f) - 0.8f;
+
+                ButtonTrigger bA = CreateButtonWithTrigger(new Vector3(btnAX, y + 0.15f, btnAZ), root.transform, $"Button_P4A_Slot{i}", door4, floorTopY);
+                bA.require2DMode = true;
+                bA.collapseToPlayerZIn2D = true;
+
+                ButtonTrigger bB = CreateButtonWithTrigger(new Vector3(btnBX, y + 0.15f, btnBZ), root.transform, $"Button_P4B_Slot{i}", door4, floorTopY);
+                bB.require2DMode = true;
+                bB.collapseToPlayerZIn2D = true;
+                break;
+        }
+    }
+
+    // End zone at the end of every level
+    GameObject endZone = Instantiate(
+        endZonePrefab != null ? endZonePrefab : floorPrefab,
+        new Vector3(startX + 70f, y + 1.25f, baseZ),
+        Quaternion.identity,
+        root.transform);
+    endZone.name = "EndZone";
+    endZone.transform.localScale = new Vector3(1f, 1f, 1f);
+    SetLayerRecursively(endZone, groundLayerIndex);
+
+    if (endZone.GetComponent<EndZoneTrigger>() == null)
+    {
+        endZone.AddComponent<EndZoneTrigger>();
+    }
+
+    Collider endZoneCol = endZone.GetComponentInChildren<Collider>();
+    if (endZoneCol != null) endZoneCol.isTrigger = true;
+
+    BuildNavMesh(root);
+}
 
     [ContextMenu("Preview Layout")]
     private void PreviewLayout()
