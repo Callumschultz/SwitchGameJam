@@ -309,16 +309,8 @@ private void BuildLevel()
         player.gameObject.AddComponent<PlayerAttack>();
     }
 
-    // Define puzzle order per level
-    int[][] puzzleOrders = new int[][]
-    {
-        new int[] { 1, 2, 3, 4 }, // Level 1 — original order
-        new int[] { 2, 4, 1, 3 }, // Level 2
-        new int[] { 3, 1, 4, 2 }, // Level 3
-        new int[] { 4, 3, 2, 1 }, // Level 4 — reversed
-    };
-
-    int[] order = puzzleOrders[Mathf.Clamp(levelIndex, 0, puzzleOrders.Length - 1)];
+    // Level 1: full set including invisible-bridge puzzle (3). Levels 2+: only 1, 2, 4 — no puzzle 3 (avoids clipping when reusing layout).
+    int[] order = GetPresetPuzzleOrder(levelIndex);
 
     for (int i = 0; i < 4; i++)
     {
@@ -402,6 +394,34 @@ private void BuildLevel()
 
     BuildNavMesh(root);
 }
+
+    /// <summary>
+    /// Level 0: full sequence including puzzle 3 (invisible bridge). Level 1+: only puzzles 1, 2, and 4 — no puzzle 3 (reduces clipping on reused layout).
+    /// Order for level 1+ is deterministic but pseudo-random per index: always includes at least one of each of 1, 2, 4; fourth slot repeats one of them.
+    /// </summary>
+    private static int[] GetPresetPuzzleOrder(int idx)
+    {
+        if (idx <= 0)
+        {
+            return new int[] { 1, 2, 3, 4 };
+        }
+
+        UnityEngine.Random.InitState(unchecked(idx * 73856093 + 19349663));
+
+        int[] pool = { 1, 2, 4 };
+        int extra = pool[UnityEngine.Random.Range(0, pool.Length)];
+        int[] order = new int[] { 1, 2, 4, extra };
+
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            int tmp = order[i];
+            order[i] = order[j];
+            order[j] = tmp;
+        }
+
+        return order;
+    }
 
     [ContextMenu("Preview Layout")]
     private void PreviewLayout()
